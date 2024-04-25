@@ -1,0 +1,222 @@
+from random import randint, uniform
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.model_selection import train_test_split
+from sklearn import metrics
+
+
+class GA:
+    def __init__(self, numInd, numGen, mutatePerc, file, version):
+        self.numInd = numInd
+        self.numGen = numGen
+        self.mutatePerc = mutatePerc/100
+        self.version = version
+        self.population = []
+        self.theBest = None
+        self.file = file
+
+    def generateInd(self):
+        if self.version == 1:
+            return [randint(3,20),randint(0,2),round(uniform(0,1),4)]
+
+        if self.version == 2:
+            return [randint(1,20), randint(0,1)]
+
+        if self.version == 3:
+            return [randint(3, 200),randint(3,20),randint(0,2),round(uniform(0,1),4)]
+        
+        if self.version == 4:
+            return [round(uniform(0,1),4), randint(0,3)]
+
+    def generateGen(self):
+        for i in range(self.numInd):
+            self.population.append(self.generateInd())
+
+    def generateModel(self):
+        self.data = pd.read_csv(self.file)
+        self.columns = self.data.columns.tolist()
+        y = self.data[self.data.columns[-1]]
+        self.columns.pop()
+        x = self.data[self.columns]
+        self.x_treino, self.x_teste, self.y_treino, self.y_teste = train_test_split(x,y,test_size=0.3,random_state=1)
+
+    def fitness(self, cromossome):
+
+        if self.version == 1:
+            dicionario = {0: 'gini',1: 'entropy',2:'log_loss'}
+            self.tree = DecisionTreeClassifier(max_depth=cromossome[0],criterion=dicionario[cromossome[1]],min_samples_split=cromossome[2])
+            self.tree.fit(self.x_treino, self.y_treino)
+            previsao = self.tree.predict(self.x_teste)
+            accuracy = metrics.accuracy_score(self.y_teste, previsao)
+            return accuracy
+
+        if self.version == 2:
+            dicionario = {0: 'uniform', 1: 'distance'}
+            self.knn = KNeighborsClassifier(n_neighbors=cromossome[0], weights=dicionario[cromossome[1]])
+            self.knn.fit(self.x_treino, self.y_treino)
+            previsao = self.knn.predict(self.x_teste)
+            accuracy = metrics.accuracy_score(self.y_teste, previsao)
+            return accuracy
+
+        if self.version == 3:
+            dicionario = {0: 'gini', 1: 'entropy', 2: 'log_loss'}
+            self.rf = RandomForestClassifier(n_estimators=cromossome[0], max_depth=cromossome[1], criterion=dicionario[cromossome[2]], min_samples_split=cromossome[3])
+            self.rf.fit(self.x_treino, self.y_treino)
+            previsao = self.rf.predict(self.x_teste)
+            accuracy = metrics.accuracy_score(self.y_teste, previsao)
+            return accuracy
+        
+        if self.version == 4:
+            dicionario = {0:'linear', 1: 'poly', 2: 'rbf', 3:'sigmoid'}
+            self.svm = SVC(C = cromossome[0], kernel=dicionario[cromossome[1]])
+            self.svm.fit(self.x_treino, self.y_treino)
+            previsao = self.svm.predict(self.x_teste)
+            accuracy = metrics.accuracy_score(self.y_teste, previsao)
+            return accuracy
+
+    def tournament(self, cromossome1, cromossome2):
+        if self.fitness(cromossome1) > self.fitness(cromossome2):
+            return cromossome1
+
+        if self.fitness(cromossome1) < self.fitness(cromossome2):
+            return cromossome2
+
+        else:
+            return cromossome1
+
+    def crossover(self, parent1, parent2):
+
+        if self.version == 1:
+            num = randint(1,2)
+            if num == 1:
+                child1 = [parent1[0], parent2[1], parent2[2]]
+                child2 = [parent2[0], parent1[1], parent1[2]]
+            if num == 2:
+                child1 = [parent1[0], parent1[1], parent2[2]]
+                child2 = [parent2[0], parent2[1], parent1[2]]
+            return self.mutate(child1), self.mutate(child2)
+
+        if self.version == 2:
+            child1 = [parent1[0], parent2[1]]
+            child2 = [parent2[0], parent1[1]]
+            return self.mutate(child1), self.mutate(child2)
+
+        if self.version == 3:
+            num = randint(1,3)
+            if num == 1:
+                child1 = [parent1[0], parent2[1], parent2[2], parent2[3]]
+                child2 = [parent2[0], parent1[1], parent1[2], parent1[3]]
+            if num == 2:
+                child1 = [parent1[0], parent1[1], parent2[2], parent2[3]]
+                child2 = [parent2[0], parent2[1], parent1[2], parent1[3]]
+            if num == 3:
+                child1 = [parent1[0], parent1[1], parent1[2], parent2[3]]
+                child2 = [parent2[0], parent2[1], parent2[2], parent1[3]]
+            return self.mutate(child1), self.mutate(child2)
+        
+        if self.version == 4:
+            child1 = [parent1[0], parent2[1]]
+            child2 = [parent2[0], parent1[1]]
+            return self.mutate(child1), self.mutate(child2)
+
+    def mutate(self, cromossome):
+        if self.version == 1:
+            for i in range(0,3):
+                num = round(uniform(0,1),2)
+                if num <= self.mutatePerc:
+                    if i == 0:
+                        cromossome[0] = randint(3, 20)
+                    elif i == 1:
+                        cromossome[1] = randint(0, 1)
+                    else:
+                        cromossome[2] = round(uniform(0,1),4)
+
+        if self.version == 2:
+            for i in range(2):
+                num = round(uniform(0,1),2)
+                if num <= self.mutatePerc:
+                    if i == 0:
+                        cromossome[i] = randint(1,20)
+                    else:
+                        cromossome[i] = randint(0,1)
+
+        if self.version == 3:
+            for i in range(0,4):
+                num = round(uniform(0,1),2)
+                if num <= self.mutatePerc:
+                    if i == 0:
+                        cromossome[0] = randint(3, 200)
+                    elif i == 1:
+                        cromossome[1] = randint(3, 20)
+                    elif i == 2:
+                        cromossome[2] = randint(0, 1)
+                    else:
+                        cromossome[3] = round(uniform(0,1),4)
+        
+        if self.version == 4:
+            for i in range(2):
+                num = round(uniform(0,1),2)
+                if num <= self.mutatePerc:
+                    if i == 0:
+                        cromossome[i] = round(uniform(0,1),4)
+                    else:
+                        cromossome[i] = randint(0,3)
+        return cromossome
+
+    def best(self, cromossome):
+        if self.theBest is None or self.fitness(cromossome) > self.fitness(self.theBest):
+            self.theBest = cromossome.copy()
+
+    def execute(self):
+      self.generateModel()
+      with open('resultado.txt','w') as saida:  
+        for x in range(1, self.numGen+1):
+            if x == 1:
+                self.generateGen()
+                print(f"Geração {x}°","-"*20,file=saida)
+                for i in range(self.numInd):
+                    print(self.population[i], self.fitness(self.population[i]),file=saida)
+                    self.best(self.population[i])
+
+            else:
+                self.filhos = []
+                loop = 0
+                while loop < self.numInd/2:   
+                    num1 = randint(0,self.numInd-1)
+                    num2 = randint(0,self.numInd-1)
+                    while num2 == num1:
+                        num2 = randint(0,self.numInd-1)
+                    parent1 = self.tournament(self.population[num1], self.population[num2])
+
+                    num3 = randint(0,self.numInd-1)
+                    num4 = randint(0,self.numInd-1)
+                    while num4 == num3:
+                        num4 = randint(0,self.numInd-1)
+                    parent2 = self.tournament(self.population[num3], self.population[num4])
+                    child1, child2 = self.crossover(parent1, parent2)
+                    self.filhos.append(child1)
+                    self.filhos.append(child2)
+                    loop += 1
+                self.population = self.filhos[:]
+
+                print(f"Geração {x}°","-"*20,file=saida)
+                for z in range(self.numInd):
+                    print(self.population[z], self.fitness(self.population[z]),file=saida)
+                    self.best(self.population[z])
+        print("-"*20,file=saida)
+        print("Melhor indivíduo:",file=saida)
+        print(self.theBest, self.fitness(self.theBest),file=saida) 
+
+if __name__ == '__main__' :
+    print("Selecione os parêmetros que serão inseridos no algorítmo genético:")
+    numInd = int(input("Número de indivíduos por geração: "))
+    numGen = int(input("Número de Gerações: "))
+    mutatePerc = int(input("Percentual de mutação: "))
+    dbName = input("Nome do arquivo (lembre-se de por .csv no final): ")
+    version = int(input("Digite se deseja utilizar 1-DecisionTree/2-KNN/3-RandomForest/4-SVM: "))
+    teste = GA(numInd, numGen, mutatePerc, dbName, version)
+
+    teste.execute()
